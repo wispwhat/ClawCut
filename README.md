@@ -1,3 +1,5 @@
+> **Note:** This fork contains local workarounds and custom patches for our local agent environment. It is provided as-is and is not maintained for upstream merging.
+
 # ClawCut Universal LLM Bridge & Proxy 4.10.30
 
 ClawCut is a proxy that sits between OpenClaw and any LLM — local or cloud. It solves the "Cognitive Overload" problem for small models, cuts JSON clutter, injects commands, translates between API formats, and lets you switch between completely different LLM (local Ollama, local MLX, NVIDIA cloud, OpenAI, etc.) by simply restarting with a different profile flag. Your `openclaw.json` never needs to change.
