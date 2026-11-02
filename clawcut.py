@@ -1631,6 +1631,24 @@ setInterval(loadLogs, 1000);
         if not ollama_data: return json.dumps({"error": "No data received"}), 400
             
         original_messages = ollama_data.get('messages', [])
+    
+        # --- PATCH: Merge consecutive user messages (fixes Discord internal context split) ---
+        # while len(original_messages) >= 2 and original_messages[-1].get('role') == 'user' and original_messages[-2].get('role') == 'user':
+        #     original_messages[-2]['content'] = original_messages[-2].get('content', '') + "\n\n" + original_messages[-1].get('content', '')
+        #     original_messages.pop()
+        # -------------------------------------------------------------------------------------
+
+        # --- ROBUST OPENCLAW METADATA MERGER ---
+        if len(original_messages) > 0 and original_messages[-1].get('role') == 'user':
+            last_content = original_messages[-1].get('content', '')
+            if 'BEGIN_OPENCLAW_INTERNAL_CONTEXT' in last_content or '[System-Info:' in last_content:
+                meta_msg = original_messages.pop()
+                for msg in reversed(original_messages):
+                    if msg.get('role') == 'user':
+                        msg['content'] += "\n\n" + meta_msg.get('content', '')
+                        break
+        # --------------------------------------
+
         requested_model = ollama_data.get('model', OPENCLAW_MODEL_ID)
         
         # NACHHER:
@@ -1696,7 +1714,7 @@ setInterval(loadLogs, 1000);
                 print(json.dumps(passthrough_data, indent=2, ensure_ascii=False))
                 print(f"[DEBUG] {'-'*60}")
             try:
-                raw_req = requests.post(LLM_SERVER_URL, json=passthrough_data, headers=LLM_REQUEST_HEADERS, stream=True, timeout=180)
+                raw_req = requests.post(LLM_SERVER_URL, json=passthrough_data, headers=LLM_REQUEST_HEADERS, stream=True, timeout=3600)
             except requests.exceptions.Timeout as e:
                 print(f"\n[ERROR] Upstream timeout: {e}")
                 return json.dumps({"error": "LLM Server Timeout", "details": str(e), "server": LLM_SERVER_URL}), 504
@@ -1828,7 +1846,7 @@ setInterval(loadLogs, 1000);
                 sys_msg = passthrough_data['messages'][0].get('content', '')
                 sys_msg = re.sub(r'## Silent Replies.*?(?:Right: NO_REPLY|NO_REPLY)', '', sys_msg, flags=re.DOTALL)
                 sys_msg = sys_msg.replace("When you have nothing to say, respond with ONLY: NO_REPLY", "")
-                dynamic_pattern = r"(?i)(The current date and time is.*?$|Current Time:.*?$|Date:.*?$)"
+                dynamic_pattern = r"(?i)^(?:The current date and time is|Current Time:|Current date:|Date:).*?$"
                 dynamic_parts = re.findall(dynamic_pattern, sys_msg, flags=re.MULTILINE)
                 if dynamic_parts:
                     sys_msg = re.sub(dynamic_pattern, "", sys_msg, flags=re.MULTILINE).strip()
@@ -1874,7 +1892,7 @@ setInterval(loadLogs, 1000);
                 print(json.dumps(passthrough_data, indent=2, ensure_ascii=False))
                 print(f"[DEBUG] {'-'*60}")
             try:
-                raw_req = requests.post(LLM_SERVER_URL, json=passthrough_data, headers=LLM_REQUEST_HEADERS, stream=True, timeout=180)
+                raw_req = requests.post(LLM_SERVER_URL, json=passthrough_data, headers=LLM_REQUEST_HEADERS, stream=True, timeout=3600)
             except requests.exceptions.Timeout as e:
                 print(f"\n[ERROR] Upstream timeout: {e}")
                 return json.dumps({"error": "LLM Server Timeout", "details": str(e), "server": LLM_SERVER_URL}), 504
@@ -1984,7 +2002,7 @@ setInterval(loadLogs, 1000);
                                 retry_data['tool_choice'] = "required"
                                 if DEBUG_MODE:
                                     print("[DEBUG] FULL_PASS_THROUGH: retrying tool request with tool_choice=required.")
-                                retry_req = requests.post(LLM_SERVER_URL, json=retry_data, headers=LLM_REQUEST_HEADERS, stream=True, timeout=180)
+                                retry_req = requests.post(LLM_SERVER_URL, json=retry_data, headers=LLM_REQUEST_HEADERS, stream=True, timeout=3600)
                                 if retry_req.status_code == 200:
                                     retry_merged_tools = {}
                                     retry_full_content = ""
@@ -2134,7 +2152,7 @@ setInterval(loadLogs, 1000);
                 sys_msg = passthrough_data['messages'][0].get('content', '')
                 sys_msg = re.sub(r'## Silent Replies.*?(?:Right: NO_REPLY|NO_REPLY)', '', sys_msg, flags=re.DOTALL)
                 sys_msg = sys_msg.replace("When you have nothing to say, respond with ONLY: NO_REPLY", "")
-                dynamic_pattern = r"(?i)(The current date and time is.*?$|Current Time:.*?$|Date:.*?$)"
+                dynamic_pattern = r"(?i)^(?:The current date and time is|Current Time:|Current date:|Date:).*?$"
                 dynamic_parts = re.findall(dynamic_pattern, sys_msg, flags=re.MULTILINE)
                 if dynamic_parts:
                     sys_msg = re.sub(dynamic_pattern, "", sys_msg, flags=re.MULTILINE).strip()
@@ -2168,7 +2186,7 @@ setInterval(loadLogs, 1000);
                 print(json.dumps(passthrough_data, indent=2, ensure_ascii=False))
                 print(f"[DEBUG] {'-'*60}")
             try:
-                raw_req = requests.post(LLM_SERVER_URL, json=passthrough_data, headers=LLM_REQUEST_HEADERS, stream=True, timeout=180)
+                raw_req = requests.post(LLM_SERVER_URL, json=passthrough_data, headers=LLM_REQUEST_HEADERS, stream=True, timeout=3600)
             except requests.exceptions.Timeout as e:
                 print(f"\n[ERROR] Upstream timeout: {e}")
                 return json.dumps({"error": "LLM Server Timeout", "details": str(e), "server": LLM_SERVER_URL}), 504
@@ -2278,7 +2296,7 @@ setInterval(loadLogs, 1000);
                                 retry_data['tool_choice'] = "required"
                                 if DEBUG_MODE:
                                     print("[DEBUG] COMPAT_PASS_THROUGH: retrying tool request with tool_choice=required.")
-                                retry_req = requests.post(LLM_SERVER_URL, json=retry_data, headers=LLM_REQUEST_HEADERS, stream=True, timeout=180)
+                                retry_req = requests.post(LLM_SERVER_URL, json=retry_data, headers=LLM_REQUEST_HEADERS, stream=True, timeout=3600)
                                 if retry_req.status_code == 200:
                                     retry_merged_tools = {}
                                     retry_full_content = ""
@@ -2431,6 +2449,10 @@ setInterval(loadLogs, 1000);
 
         # --- SMART AMNESIA LOGIC ---
         
+        if original_messages and original_messages[0].get('role') == 'system':
+            proxy.last_sys_msg = copy.deepcopy(original_messages[0])
+        elif getattr(proxy, 'last_sys_msg', None):
+            original_messages.insert(0, copy.deepcopy(proxy.last_sys_msg))
 
         apply_amnesia = False
         if not PASS_THROUGH_MODE and ENABLE_SMART_AMNESIA:
@@ -2470,7 +2492,7 @@ setInterval(loadLogs, 1000);
             sys_msg = messages[0]['content']
             sys_msg = re.sub(r'## Silent Replies.*?(?:Right: NO_REPLY|NO_REPLY)', '', sys_msg, flags=re.DOTALL)
             sys_msg = sys_msg.replace("When you have nothing to say, respond with ONLY: NO_REPLY", "")
-            dynamic_pattern = r"(?i)(The current date and time is.*?$|Current Time:.*?$|Date:.*?$)"
+            dynamic_pattern = r"(?i)^(?:The current date and time is|Current Time:|Current date:|Date:).*?$"
             dynamic_parts = re.findall(dynamic_pattern, sys_msg, flags=re.MULTILINE)
             if dynamic_parts:
                 sys_msg = re.sub(dynamic_pattern, "", sys_msg, flags=re.MULTILINE).strip()
@@ -2511,8 +2533,7 @@ setInterval(loadLogs, 1000);
             "model": LLM_MODEL_IDENTIFIER,
             "messages": messages,
             "stream": True,
-            "temperature": ollama_data.get('options', {}).get('temperature', 0.0),
-            "max_tokens": ollama_data.get('options', {}).get('num_predict', 4096)
+            "max_tokens": ollama_data.get('options', {}).get('num_predict', 16384)
         }
 
         if 'tools' in ollama_data:
@@ -2557,7 +2578,7 @@ setInterval(loadLogs, 1000);
             print(f"[DEBUG] {'-'*60}")
 
         try:
-            req = requests.post(LLM_SERVER_URL, json=openai_payload, headers=LLM_REQUEST_HEADERS, stream=True, timeout=180)
+            req = requests.post(LLM_SERVER_URL, json=openai_payload, headers=LLM_REQUEST_HEADERS, stream=True, timeout=3600)
         except requests.exceptions.Timeout as e:
             print(f"\n[ERROR] Upstream timeout: {e}")
             return json.dumps({"error": "LLM Server Timeout", "details": str(e), "server": LLM_SERVER_URL}), 504
@@ -2570,8 +2591,9 @@ setInterval(loadLogs, 1000);
         def generate():
             token_count = 0
             full_content = ""
+            full_reasoning = ""
             merged_tools = {}
-            
+
             # --- Detect if this conversation originated from a Cron job ---
             is_cron_job = False
             for m in reversed(messages):
@@ -2579,11 +2601,10 @@ setInterval(loadLogs, 1000);
                     if '[cron:' in m.get('content', '').lower():
                         is_cron_job = True
                     break
-            # Also detect systemEvent jobs (no [cron:] prefix, but inbound_meta channel=cron-event)
             if not is_cron_job and messages and messages[0].get('role') == 'system':
                 if '"channel": "cron-event"' in messages[0].get('content', ''):
                     is_cron_job = True
-            
+
             for line in req.iter_lines():
                 if not line: continue
                 line_text = line.decode('utf-8')
@@ -2593,6 +2614,8 @@ setInterval(loadLogs, 1000);
                     try:
                         chunk = json.loads(data_str)
                         delta = chunk['choices'][0]['delta']
+                        if 'reasoning_content' in delta and delta['reasoning_content']:
+                            full_reasoning += delta['reasoning_content']
                         if 'content' in delta and delta['content']:
                             full_content += delta['content']
                             token_count += 1
@@ -2603,18 +2626,36 @@ setInterval(loadLogs, 1000);
                                 if 'function' in tc:
                                     func = tc['function']
                                     if 'name' in func and func['name']: merged_tools[idx]["name"] += func['name']
-                                    if 'arguments' in func and func['arguments']: merged_tools[idx]["arguments"] += func['arguments']
+                                    if 'arguments' in func and func['arguments']:
+                                        arg_piece = func['arguments']
+                                        merged_tools[idx]["arguments"] += arg_piece if isinstance(arg_piece, str) else json.dumps(arg_piece)
                     except Exception: continue
-            
+
             duration = time.time() - start_time
             full_content = full_content.replace('<|im_end|>', '').replace('<|im_start|>', '').replace('<|endoftext|>', '').strip()
-            
+
             final_tool_calls = []
             for idx, func in merged_tools.items():
-                if func["name"]: final_tool_calls.append({"function": {"name": func["name"], "arguments": func["arguments"]}})
-                        
+                # Ignore broken empty-argument exec calls so we can retry cleanly
+                if func["name"] == "exec" and func["arguments"].strip() in ("", "{}"):
+                    if DEBUG_MODE:
+                        print("[DEBUG] Dropped empty exec{} tool_call; will trigger retry.")
+                    continue
+                if func["name"]:
+                    final_tool_calls.append({"function": {"name": func["name"], "arguments": func["arguments"]}})
+
+            # If content & tool_calls are empty, check if a tool call leaked into reasoning_content
+            if not final_tool_calls and not full_content and full_reasoning:
+                if DEBUG_MODE:
+                    print(f"[DEBUG] Empty content/tools, but model generated {len(full_reasoning)} chars of reasoning_content: {full_reasoning[:200]}...")
+                extracted_from_reasoning = extract_hallucinated_tools(full_reasoning)
+                for obj, _, _ in extracted_from_reasoning:
+                    if "arguments" in obj:
+                        args_str = obj["arguments"] if isinstance(obj["arguments"], str) else json.dumps(obj["arguments"])
+                        final_tool_calls.append({"function": {"name": obj["name"], "arguments": args_str}})
+
             BT = chr(96)
-            
+
             if not PASS_THROUGH_MODE:
                 if not final_tool_calls and full_content:
                     extracted = extract_hallucinated_tools(full_content)
@@ -2647,14 +2688,20 @@ setInterval(loadLogs, 1000);
                     ) if last_user_content_lower else False
                     script_action_requested = EXPECTED_SCRIPT_BASE_PATH.lower() in last_user_content_lower if last_user_content_lower else False
                     plain_failure_text = re.search(r'(tool result:|fehler|error|failed|konnte nicht|kann nicht|entschuldigung)', full_content, re.IGNORECASE)
-                    tool_action_requested = matched_rescue or file_action_requested or script_action_requested
+                    
+                    # Detect if the model announced a next step ("Let me check...", "Now I will...") and stopped
+                    dangling_announcement = bool(
+                        full_content and re.search(r'\b(let me|i will|i\'ll|running|checking|verify|now i)\b', full_content.lower())
+                    )
+
+                    tool_action_requested = matched_rescue or file_action_requested or script_action_requested or dangling_announcement
                     if tool_action_requested and not plain_failure_text:
                         try:
                             retry_payload = copy.deepcopy(openai_payload)
                             retry_payload['tool_choice'] = "required"
                             if DEBUG_MODE:
                                 print("[DEBUG] OFF-MODE: retrying tool request with tool_choice=required.")
-                            retry_req = requests.post(LLM_SERVER_URL, json=retry_payload, headers=LLM_REQUEST_HEADERS, stream=True, timeout=180)
+                            retry_req = requests.post(LLM_SERVER_URL, json=retry_payload, headers=LLM_REQUEST_HEADERS, stream=True, timeout=3600)
                             if retry_req.status_code == 200:
                                 retry_merged_tools = {}
                                 retry_full_content = ""
@@ -2768,17 +2815,18 @@ setInterval(loadLogs, 1000);
                 if not PASS_THROUGH_MODE and not final_tool_calls and not full_content and original_messages and original_messages[-1].get('role') == 'tool':
                     try:
                         retry_payload = copy.deepcopy(openai_payload)
-                        retry_payload.pop('tools', None)
+                        # KEEP tools enabled so the model can continue its multi-step loop!
                         retry_payload['messages'] = copy.deepcopy(messages)
                         retry_payload['messages'].append({
                             "role": "user",
-                            "content": "Use the most recent tool result to answer the user's request directly. Do not call another tool. Do not reply with NO_REPLY."
+                            "content": "Continue with the next required `exec` tool call to complete the user's task, or provide the final response if finished. Do not reply with NO_REPLY."
                         })
                         if DEBUG_MODE:
-                            print("[DEBUG] TOOL-RESULT-RETRY: retrying empty post-tool response without tools.")
-                        retry_req = requests.post(LLM_SERVER_URL, json=retry_payload, headers=LLM_REQUEST_HEADERS, stream=True, timeout=180)
+                            print("[DEBUG] TOOL-RESULT-RETRY: retrying empty post-tool response with tools preserved.")
+                        retry_req = requests.post(LLM_SERVER_URL, json=retry_payload, headers=LLM_REQUEST_HEADERS, stream=True, timeout=3600)
                         if retry_req.status_code == 200:
                             retry_full_content = ""
+                            retry_merged_tools = {}
                             for retry_line in retry_req.iter_lines():
                                 if not retry_line:
                                     continue
@@ -2796,8 +2844,23 @@ setInterval(loadLogs, 1000);
                                     if 'content' in retry_delta and retry_delta['content']:
                                         retry_full_content += retry_delta['content']
                                         token_count += 1
+                                    if 'tool_calls' in retry_delta:
+                                        for retry_tc in retry_delta['tool_calls']:
+                                            retry_idx = retry_tc.get('index', 0)
+                                            if retry_idx not in retry_merged_tools:
+                                                retry_merged_tools[retry_idx] = {"name": "", "arguments": ""}
+                                            if 'function' in retry_tc:
+                                                retry_func = retry_tc['function']
+                                                if 'name' in retry_func and retry_func['name']:
+                                                    retry_merged_tools[retry_idx]["name"] += retry_func['name']
+                                                if 'arguments' in retry_func and retry_func['arguments']:
+                                                    arg_piece = retry_func['arguments']
+                                                    retry_merged_tools[retry_idx]["arguments"] += arg_piece if isinstance(arg_piece, str) else json.dumps(arg_piece)
                                 except Exception:
                                     continue
+                            for retry_idx, retry_func in retry_merged_tools.items():
+                                if retry_func["name"]:
+                                    final_tool_calls.append({"function": {"name": retry_func["name"], "arguments": retry_func["arguments"]}})
                             if retry_full_content:
                                 full_content = retry_full_content.strip()
                     except Exception:
